@@ -141,7 +141,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/workspaces v1.38.4
 	github.com/aws/smithy-go v1.22.2
 	github.com/gocarina/gocsv v0.0.0-20201208093247-67c824bc04d4
-	github.com/goccy/go-yaml v1.11.3
+	github.com/goccy/go-yaml v1.15.2
 	github.com/golang/protobuf v1.5.4
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
@@ -151,13 +151,10 @@ require (
 	golang.org/x/text v0.23.0
 )
 
-require golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
-
 require (
 	github.com/aws/aws-sdk-go v1.44.183 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/go-playground/validator/v10 v10.20.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
@@ -258,7 +255,7 @@ require (
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/oauth2 v0.21.0 // indirect
+	golang.org/x/oauth2 v0.27.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/api v0.171.0 // indirect
