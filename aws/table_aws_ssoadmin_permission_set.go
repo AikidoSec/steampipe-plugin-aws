@@ -2,8 +2,7 @@ package aws
 
 import (
 	"context"
-	"slices"
-
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin/types"
@@ -18,11 +17,10 @@ func tableAwsSsoAdminPermissionSet(_ context.Context) *plugin.Table {
 		Name:        "aws_ssoadmin_permission_set",
 		Description: "AWS SSO Permission Set",
 		List: &plugin.ListConfig{
-			ParentHydrate: listSsoAdminInstances,
-			Hydrate:       listSsoAdminPermissionSets,
-			Tags:          map[string]string{"service": "sso", "action": "ListPermissionSets"},
+			Hydrate: listSsoAdminPermissionSets,
+			Tags:    map[string]string{"service": "sso", "action": "ListPermissionSets"},
 			KeyColumns: []*plugin.KeyColumn{
-				{Name: "instance_arn", Require: plugin.Optional},
+				{Name: "instance_arn", Require: plugin.Required},
 			},
 		},
 		HydrateConfig: []plugin.HydrateConfig{
@@ -132,8 +130,12 @@ func tableAwsSsoAdminPermissionSet(_ context.Context) *plugin.Table {
 //// LIST FUNCTION
 
 func listSsoAdminPermissionSets(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
-	instance := h.Item.(types.InstanceMetadata)
-	instanceArn := *instance.InstanceArn
+	instanceARN := d.EqualsQualString("instance_arn")
+
+	if instanceARN == "" {
+		plugin.Logger(ctx).Error("aws_ssoadmin_permission_set.listSsoAdminPermissionSets", "instance_arn_missing", "Instance ARN is required")
+		return nil, fmt.Errorf("you must specify either 'instance_arn' in the query parameter to query this table")
+	}
 
 	// Create session
 	svc, err := SSOAdminClient(ctx, d)
@@ -144,20 +146,6 @@ func listSsoAdminPermissionSets(ctx context.Context, d *plugin.QueryData, h *plu
 	if svc == nil {
 		// Unsupported region, return no data
 		return nil, nil
-	}
-
-	equalQuals := d.EqualsQuals
-	// Minimize the API call with the given layer name
-	if equalQuals["instance_arn"] != nil {
-		if equalQuals["instance_arn"].GetStringValue() != "" {
-			if equalQuals["instance_arn"].GetStringValue() != "" && equalQuals["instance_arn"].GetStringValue() != instanceArn {
-				return nil, nil
-			}
-		} else if len(getListValues(equalQuals["instance_arn"].GetListValue())) > 0 {
-			if !slices.Contains(aws.ToStringSlice(getListValues(equalQuals["instance_arn"].GetListValue())), instanceArn) {
-				return nil, nil
-			}
-		}
 	}
 
 	// Limiting the results
@@ -174,7 +162,7 @@ func listSsoAdminPermissionSets(ctx context.Context, d *plugin.QueryData, h *plu
 	}
 
 	input := &ssoadmin.ListPermissionSetsInput{
-		InstanceArn: aws.String(instanceArn),
+		InstanceArn: aws.String(instanceARN),
 		MaxResults:  aws.Int32(maxLimit),
 	}
 
@@ -196,7 +184,7 @@ func listSsoAdminPermissionSets(ctx context.Context, d *plugin.QueryData, h *plu
 
 		for _, items := range output.PermissionSets {
 			d.StreamListItem(ctx, &PermissionSetItem{
-				InstanceArn:      aws.String(instanceArn),
+				InstanceArn:      aws.String(instanceARN),
 				PermissionSetArn: aws.String(items),
 			})
 
