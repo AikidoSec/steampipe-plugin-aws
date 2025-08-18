@@ -35,6 +35,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/backup"
 	"github.com/aws/aws-sdk-go-v2/service/batch"
+	"github.com/aws/aws-sdk-go-v2/service/bedrock"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockagent"
 	"github.com/aws/aws-sdk-go-v2/service/cloudcontrol"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
@@ -51,9 +53,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentity"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/configservice"
+	"github.com/aws/aws-sdk-go-v2/service/connect"
 	"github.com/aws/aws-sdk-go-v2/service/costexplorer"
 	"github.com/aws/aws-sdk-go-v2/service/costoptimizationhub"
 	"github.com/aws/aws-sdk-go-v2/service/databasemigrationservice"
+	"github.com/aws/aws-sdk-go-v2/service/datasync"
 	"github.com/aws/aws-sdk-go-v2/service/dax"
 	"github.com/aws/aws-sdk-go-v2/service/directoryservice"
 	"github.com/aws/aws-sdk-go-v2/service/dlm"
@@ -123,6 +127,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3control"
 	"github.com/aws/aws-sdk-go-v2/service/s3tables"
 	"github.com/aws/aws-sdk-go-v2/service/sagemaker"
+	"github.com/aws/aws-sdk-go-v2/service/savingsplans"
 	"github.com/aws/aws-sdk-go-v2/service/scheduler"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
@@ -342,6 +347,32 @@ func BatchClient(ctx context.Context, d *plugin.QueryData) (*batch.Client, error
 	return client, nil
 }
 
+// BedrockClient returns the service client for AWS Bedrock service
+func BedrockClient(ctx context.Context, d *plugin.QueryData) (*bedrock.Client, error) {
+	// Get client config
+	cfg, err := getClientForQuerySupportedRegion(ctx, d, AWS_BEDROCK_SERVICE_ID)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, nil
+	}
+	return bedrock.NewFromConfig(*cfg), nil
+}
+
+// BedrockAgentClient returns the service client for AWS Bedrock Agent service
+func BedrockAgentClient(ctx context.Context, d *plugin.QueryData) (*bedrockagent.Client, error) {
+	// Get client config
+	cfg, err := getClientForQuerySupportedRegion(ctx, d, AWS_BEDROCK_SERVICE_ID)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, nil
+	}
+	return bedrockagent.NewFromConfig(*cfg), nil
+}
+
 func CloudControlClient(ctx context.Context, d *plugin.QueryData) (*cloudcontrol.Client, error) {
 	// CloudControl returns GeneralServiceException in a lot of situations, which
 	// AWS SDK treats as retryable. This is frustrating because we end up retrying
@@ -515,6 +546,18 @@ func ConfigClient(ctx context.Context, d *plugin.QueryData) (*configservice.Clie
 	return configservice.NewFromConfig(*cfg), nil
 }
 
+
+func ConnectClient(ctx context.Context, d *plugin.QueryData) (*connect.Client, error) {
+	cfg, err := getClientForQuerySupportedRegion(ctx, d, AWS_CONNECT_SERVICE_ID)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, nil
+	}
+	return connect.NewFromConfig(*cfg), nil
+}
+
 func CostExplorerClient(ctx context.Context, d *plugin.QueryData) (*costexplorer.Client, error) {
 	// Cost Explorer is a global service that operates from a single
 	// region (ce.us-east-1.amazonaws.com).
@@ -594,6 +637,19 @@ func DRSClient(ctx context.Context, d *plugin.QueryData) (*drs.Client, error) {
 		return nil, nil
 	}
 	return drs.NewFromConfig(*cfg), nil
+}
+
+func DataSyncClient(ctx context.Context, d *plugin.QueryData) (*datasync.Client, error) {
+	cfg, err := getClientForQuerySupportedRegion(ctx, d, AWS_DATASYNC_SERVICE_ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if cfg == nil {
+		return nil, nil
+	}
+
+	return datasync.NewFromConfig(*cfg), nil
 }
 
 func DynamoDBClient(ctx context.Context, d *plugin.QueryData) (*dynamodb.Client, error) {
@@ -1417,6 +1473,17 @@ func SageMakerClient(ctx context.Context, d *plugin.QueryData) (*sagemaker.Clien
 		return nil, nil
 	}
 	return sagemaker.NewFromConfig(*cfg), nil
+}
+
+func SavingsPlansClient(ctx context.Context, d *plugin.QueryData) (*savingsplans.Client, error) {
+	cfg, err := getClientForDefaultRegion(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, nil
+	}
+	return savingsplans.NewFromConfig(*cfg), nil
 }
 
 func SchedulerClient(ctx context.Context, d *plugin.QueryData) (*scheduler.Client, error) {
