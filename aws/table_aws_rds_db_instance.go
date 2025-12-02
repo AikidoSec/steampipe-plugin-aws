@@ -447,6 +447,12 @@ func tableAwsRDSDBInstance(_ context.Context) *plugin.Table {
 				Type:        proto.ColumnType_JSON,
 				Transform:   transform.FromField("TagList"),
 			},
+			{
+				Name:        "engine_lifecycle_support",
+				Description: "Engine lifecycle support value.",
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("EngineLifecycleSupport"),
+			},
 
 			// Standard columns
 			{
