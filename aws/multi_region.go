@@ -63,6 +63,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"regexp"
 	"slices"
@@ -147,6 +148,11 @@ func SupportedRegionMatrix(serviceID string) func(ctx context.Context, d *plugin
 func SupportedRegionMatrixWithExclusions(serviceID string, excludeRegions []string) func(ctx context.Context, d *plugin.QueryData) []map[string]interface{} {
 	excludeRegions = append(excludeRegions, "me-central-1", "me-south-1")
 	return func(ctx context.Context, d *plugin.QueryData) []map[string]interface{} {
+		excludedRegionsEnv := os.Getenv("STEAMPIPE_EXCLUDED_REGIONS")
+		if excludedRegionsEnv != "" {
+			regions := strings.Split(excludedRegionsEnv, ",")
+			excludeRegions = append(excludeRegions, regions...)
+		}
 		logging.LogTime("SupportedRegionMatrixWithExlusions start")
 		defer logging.LogTime("SupportedRegionMatrixWithExlusions end")
 		// Default to an empty list of regions
