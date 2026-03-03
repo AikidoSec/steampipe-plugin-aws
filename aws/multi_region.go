@@ -146,7 +146,6 @@ func SupportedRegionMatrix(serviceID string) func(ctx context.Context, d *plugin
 // Similar to SupportedRegionMatrix, but excludes the regions in excludeRegions
 // for manual overrides if the service definition is incorrect.
 func SupportedRegionMatrixWithExclusions(serviceID string, excludeRegions []string) func(ctx context.Context, d *plugin.QueryData) []map[string]interface{} {
-	excludeRegions = append(excludeRegions, "me-central-1", "me-south-1")
 	return func(ctx context.Context, d *plugin.QueryData) []map[string]interface{} {
 		excludedRegionsEnv := os.Getenv("STEAMPIPE_EXCLUDED_REGIONS")
 		if excludedRegionsEnv != "" {
