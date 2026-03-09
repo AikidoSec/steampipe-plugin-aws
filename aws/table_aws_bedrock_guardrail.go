@@ -108,6 +108,9 @@ func listBedrockGuardrails(ctx context.Context, d *plugin.QueryData, _ *plugin.H
 
 		output, err := paginator.NextPage(ctx)
 		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), strings.ToLower("ValidationException: Unknown operation")) {
+				return nil, nil
+			}
 			plugin.Logger(ctx).Error("aws_bedrock_guardrail.listBedrockGuardrails", "api_error", err)
 			return nil, err
 		}
