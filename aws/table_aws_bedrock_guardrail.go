@@ -164,8 +164,7 @@ func getBedrockGuardrail(ctx context.Context, d *plugin.QueryData, h *plugin.Hyd
 	data, err := svc.GetGuardrail(ctx, params)
 
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), strings.ToLower("ValidationException")) {
-			plugin.Logger(ctx).Debug("aws_bedrock_guardrail.getBedrockGuardrail", "validation_exception", err)
+		if strings.Contains(strings.ToLower(err.Error()), strings.ToLower("ValidationException: Unknown operation")) {
 			return nil, nil
 		}
 		plugin.Logger(ctx).Error("aws_bedrock_guardrail.getBedrockGuardrail", "api_error", err)
