@@ -332,6 +332,11 @@ func tableAwsRDSDBInstance(_ context.Context) *plugin.Table {
 				Default:     false,
 			},
 			{
+				Name:        "storage_encryption_type",
+				Description: "The type of encryption used to protect data at rest in the DB instance",
+				Type:        proto.ColumnType_STRING,
+			},
+			{
 				Name:        "storage_throughput",
 				Description: "Specifies the storage throughput for the DB instance. This setting applies only to the gp3 storage type.",
 				Type:        proto.ColumnType_INT,
@@ -480,7 +485,6 @@ func tableAwsRDSDBInstance(_ context.Context) *plugin.Table {
 //// LIST FUNCTION
 
 func listRDSDBInstances(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
-
 	// Create Session
 	svc, err := RDSClient(ctx, d)
 	if err != nil {
