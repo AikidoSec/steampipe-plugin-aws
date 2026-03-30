@@ -350,6 +350,9 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 		if len(arns) == 0 {
 			continue
 		}
+
+		d.WaitForListRateLimit(ctx)
+
 		input := &ecs.DescribeTasksInput{
 			Cluster: clusterArn,
 			Tasks:   arns,
