@@ -272,12 +272,19 @@ func listEcsServices(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrate
 	}
 
 	for _, servicesBatch := range chunkStrings(serviceNames, 10) {
+		if len(servicesBatch) == 0 {
+			continue
+		}
+
 		d.WaitForListRateLimit(ctx)
 
 		result, err := getEcsServices(servicesBatch, cluster.ClusterArn, svc, ctx)
 		if err != nil {
 			plugin.Logger(ctx).Error("aws_ecs_service.listEcsServices", "describe_services_api_error", err)
 			return nil, err
+		}
+		if len(result.Services) == 0 {
+			continue
 		}
 
 		for _, service := range result.Services {
