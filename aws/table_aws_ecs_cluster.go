@@ -197,6 +197,8 @@ func listEcsClusters(ctx context.Context, d *plugin.QueryData, _ *plugin.Hydrate
 		o.StopOnDuplicateToken = true
 	})
 
+	var clusterArns [][]string
+
 	// List call
 	for paginator.HasMorePages() {
 		// apply rate limiting
@@ -208,10 +210,20 @@ func listEcsClusters(ctx context.Context, d *plugin.QueryData, _ *plugin.Hydrate
 			return nil, err
 		}
 
-		for _, items := range output.ClusterArns {
-			d.StreamListItem(ctx, types.Cluster{
-				ClusterArn: aws.String(items),
-			})
+		if len(output.ClusterArns) != 0 {
+			clusterArns = append(clusterArns, output.ClusterArns)
+		}
+	}
+
+	for _, arns := range clusterArns {
+		result, err := describeEcsClusters(ctx, d, svc, arns)
+		if err != nil {
+			plugin.Logger(ctx).Error("aws_ecs_cluster.listEcsClusters", "describe_clusters_api_error", err)
+			return nil, err
+		}
+
+		for _, cluster := range result.Clusters {
+			d.StreamListItem(ctx, cluster)
 
 			// Context can be cancelled due to manual cancellation or the limit has been hit
 			if d.RowsRemaining(ctx) == 0 {
@@ -226,6 +238,11 @@ func listEcsClusters(ctx context.Context, d *plugin.QueryData, _ *plugin.Hydrate
 //// HYDRATE FUNCTIONS
 
 func getEcsCluster(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	if h.Item != nil {
+		if cluster, ok := h.Item.(types.Cluster); ok && cluster.ClusterName != nil {
+			return &cluster, nil
+		}
+	}
 
 	var clusterArn string
 	if h.Item != nil {
@@ -242,16 +259,7 @@ func getEcsCluster(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDa
 		return nil, err
 	}
 
-	params := &ecs.DescribeClustersInput{
-		Clusters: []string{clusterArn},
-		Include: []types.ClusterField{
-			types.ClusterFieldAttachments,
-			types.ClusterFieldSettings,
-			types.ClusterFieldStatistics,
-		},
-	}
-
-	op, err := svc.DescribeClusters(ctx, params)
+	op, err := describeEcsClusters(ctx, d, svc, []string{clusterArn})
 	if err != nil {
 		plugin.Logger(ctx).Error("aws_ecs_cluster.getEcsCluster", "api_error", err)
 		return nil, err
@@ -262,6 +270,23 @@ func getEcsCluster(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDa
 	}
 
 	return nil, nil
+}
+
+func describeEcsClusters(ctx context.Context, d *plugin.QueryData, svc *ecs.Client, clusters []string) (*ecs.DescribeClustersOutput, error) {
+	params := &ecs.DescribeClustersInput{
+		Clusters: clusters,
+		Include: []types.ClusterField{
+			types.ClusterFieldAttachments,
+			types.ClusterFieldSettings,
+			types.ClusterFieldStatistics,
+		},
+	}
+
+	if d != nil {
+		d.WaitForListRateLimit(ctx)
+	}
+
+	return svc.DescribeClusters(ctx, params)
 }
 
 func getAwsEcsClusterTags(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {

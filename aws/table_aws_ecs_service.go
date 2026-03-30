@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -272,28 +271,22 @@ func listEcsServices(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrate
 		serviceNames = append(serviceNames, output.ServiceArns...)
 	}
 
-	var wg sync.WaitGroup
-	serviceCh := make(chan *ecs.DescribeServicesOutput, len(serviceNames))
-	errorCh := make(chan error, len(serviceNames))
+	for _, servicesBatch := range chunkStrings(serviceNames, 10) {
+		if len(servicesBatch) == 0 {
+			continue
+		}
 
-	for _, serviceData := range serviceNames {
-		wg.Add(1)
-		go getServiceDataAsync(serviceData, cluster.ClusterArn, svc, &wg, serviceCh, errorCh, ctx)
-	}
+		d.WaitForListRateLimit(ctx)
 
-	// wait for all services to be processed
-	wg.Wait()
+		result, err := getEcsServices(servicesBatch, cluster.ClusterArn, svc, ctx)
+		if err != nil {
+			plugin.Logger(ctx).Error("aws_ecs_service.listEcsServices", "describe_services_api_error", err)
+			return nil, err
+		}
+		if len(result.Services) == 0 {
+			continue
+		}
 
-	// NOTE: close channel before ranging over results
-	close(serviceCh)
-	close(errorCh)
-
-	for err := range errorCh {
-		// return the first error
-		return nil, err
-	}
-
-	for result := range serviceCh {
 		for _, service := range result.Services {
 			d.StreamListItem(ctx, service)
 
@@ -306,21 +299,11 @@ func listEcsServices(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrate
 	return nil, nil
 }
 
-func getServiceDataAsync(serviceData string, clusterARN *string, svc *ecs.Client, wg *sync.WaitGroup, serviceCh chan *ecs.DescribeServicesOutput, errorCh chan error, ctx context.Context) {
-	defer wg.Done()
-	rowData, err := getEcsService(serviceData, clusterARN, svc, ctx)
-	if err != nil {
-		errorCh <- err
-	} else if rowData != nil {
-		serviceCh <- rowData
-	}
-}
-
 // Describes the specified services running in your cluster.
 // Below API can describe up to 10 services in a single operation.
-func getEcsService(serviceData string, clusterARN *string, svc *ecs.Client, ctx context.Context) (*ecs.DescribeServicesOutput, error) {
+func getEcsServices(serviceData []string, clusterARN *string, svc *ecs.Client, ctx context.Context) (*ecs.DescribeServicesOutput, error) {
 	params := &ecs.DescribeServicesInput{
-		Services: []string{serviceData},
+		Services: serviceData,
 		Cluster:  clusterARN,
 	}
 	response, err := svc.DescribeServices(ctx, params)
@@ -328,6 +311,24 @@ func getEcsService(serviceData string, clusterARN *string, svc *ecs.Client, ctx 
 		return nil, err
 	}
 	return response, nil
+}
+
+func chunkStrings(items []string, size int) [][]string {
+	if size <= 0 {
+		return nil
+	}
+
+	chunks := make([][]string, 0, (len(items)+size-1)/size)
+	for i := 0; i < len(items); i += size {
+		end := i + size
+		if end > len(items) {
+			end = len(items)
+		}
+
+		chunks = append(chunks, items[i:end])
+	}
+
+	return chunks
 }
 
 // List api call is not returning the tags for the service, so we need to make a separate api call for getting the tag details
