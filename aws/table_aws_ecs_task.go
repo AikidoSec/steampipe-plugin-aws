@@ -257,6 +257,12 @@ func tableAwsEcsTask(_ context.Context) *plugin.Table {
 
 			// Standard columns for all tables
 			{
+				Name:        "title",
+				Description: resourceInterfaceDescription("title"),
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.From(ecsTaskFriendlyName),
+			},
+			{
 				Name:        "tags",
 				Description: resourceInterfaceDescription("tags"),
 				Type:        proto.ColumnType_JSON,
@@ -360,7 +366,6 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 		}
 
 		result, err := svc.DescribeTasks(ctx, input)
-
 		if err != nil {
 			plugin.Logger(ctx).Error("aws_ecs_task.listEcsTasks", "describe_tasks_api_error", err)
 			return nil, err
@@ -414,9 +419,7 @@ func getEcsTaskProtection(ctx context.Context, d *plugin.QueryData, h *plugin.Hy
 
 func extractClusterName(ctx context.Context, d *transform.TransformData) (interface{}, error) {
 	task := d.HydrateItem.(types.Task)
-	clusterName := strings.Split(string(*task.ClusterArn), "/")[1]
-
-	return clusterName, nil
+	return getClusterName(task), nil
 }
 
 func ecsTaskTags(_ context.Context, d *transform.TransformData) (interface{}, error) {
@@ -431,4 +434,93 @@ func ecsTaskTags(_ context.Context, d *transform.TransformData) (interface{}, er
 	}
 
 	return turbotTagsMap, nil
+}
+
+func ecsTaskFriendlyName(_ context.Context, d *transform.TransformData) (interface{}, error) {
+	task := d.HydrateItem.(types.Task)
+
+	if name := getNameTag(task.Tags); name != "" {
+		return name, nil
+	}
+
+	taskID := getTaskID(task)
+	taskDefName := getTaskDefinitionName(task)
+	svcName := getServiceName(task)
+	clusterName := getClusterName(task)
+
+	if svcName != "" {
+		return join(taskDefName, svcName, clusterName), nil
+	}
+
+	if task.StartedBy != nil && *task.StartedBy != "" {
+		switch {
+		case strings.HasPrefix(*task.StartedBy, "ecs-scheduled-task"):
+			return join(taskDefName, "schedule", clusterName), nil
+		case strings.HasPrefix(*task.StartedBy, "stepfunctions"):
+			return join(taskDefName, "stepfn", clusterName), nil
+		default:
+			return join(taskDefName, *task.StartedBy, clusterName), nil
+		}
+	}
+
+	return join("task:"+taskID, taskDefName, clusterName), nil
+}
+
+func getNameTag(tags []types.Tag) string {
+	for _, t := range tags {
+		if t.Key != nil && t.Value != nil && *t.Key == "Name" {
+			return *t.Value
+		}
+	}
+	return ""
+}
+
+func getServiceName(task types.Task) string {
+	if task.Group != nil && strings.HasPrefix(*task.Group, "service:") {
+		return strings.TrimPrefix(*task.Group, "service:")
+	}
+
+	if task.StartedBy != nil && strings.HasPrefix(*task.StartedBy, "service:") {
+		return strings.TrimPrefix(*task.StartedBy, "service:")
+	}
+
+	return ""
+}
+
+func getClusterName(task types.Task) string {
+	if task.ClusterArn == nil {
+		return ""
+	}
+	// arn:aws:ecs:region:account:cluster/cluster-name
+	parts := strings.Split(*task.ClusterArn, "/")
+	return parts[len(parts)-1]
+}
+
+func getTaskDefinitionName(task types.Task) string {
+	if task.TaskDefinitionArn == nil {
+		return ""
+	}
+	// arn:aws:ecs:region:account:task-definition/family:revision
+	parts := strings.Split(*task.TaskDefinitionArn, "/")
+	familyRev := parts[len(parts)-1]
+	return strings.Split(familyRev, ":")[0]
+}
+
+func getTaskID(task types.Task) string {
+	if task.TaskArn == nil {
+		return ""
+	}
+	// arn:aws:ecs:region:account:task/cluster-name/task-id
+	parts := strings.Split(*task.TaskArn, "/")
+	return parts[len(parts)-1]
+}
+
+func join(parts ...string) string {
+	var clean []string
+	for _, p := range parts {
+		if p != "" {
+			clean = append(clean, p)
+		}
+	}
+	return strings.Join(clean, " / ")
 }
