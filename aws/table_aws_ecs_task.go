@@ -327,7 +327,6 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 	}
 
 	input.MaxResults = &maxLimit
-	var taskArns [][]string
 
 	paginator := ecs.NewListTasksPaginator(svc, &input, func(o *ecs.ListTasksPaginatorOptions) {
 		o.Limit = maxLimit
@@ -349,23 +348,19 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 			return nil, err
 		}
 
-		taskArns = append(taskArns, output.TaskArns)
-	}
-
-	for _, arns := range taskArns {
-		if len(arns) == 0 {
+		if len(output.TaskArns) == 0 {
 			continue
 		}
 
 		d.WaitForListRateLimit(ctx)
 
-		input := &ecs.DescribeTasksInput{
+		describeInput := &ecs.DescribeTasksInput{
 			Cluster: clusterArn,
-			Tasks:   arns,
+			Tasks:   output.TaskArns,
 			Include: []types.TaskField{types.TaskFieldTags},
 		}
 
-		result, err := svc.DescribeTasks(ctx, input)
+		result, err := svc.DescribeTasks(ctx, describeInput)
 		if err != nil {
 			plugin.Logger(ctx).Error("aws_ecs_task.listEcsTasks", "describe_tasks_api_error", err)
 			return nil, err
