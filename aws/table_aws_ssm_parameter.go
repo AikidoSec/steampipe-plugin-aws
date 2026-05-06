@@ -71,7 +71,8 @@ func tableAwsSSMParameter(_ context.Context) *plugin.Table {
 				Name:        "arn",
 				Description: "The Amazon Resource Name (ARN) of the parameter.",
 				Type:        proto.ColumnType_STRING,
-				Transform:   transform.FromField("ARN"),
+				Hydrate:     getAwsSSMParameterAkas,
+				Transform:   transform.FromValue(),
 			},
 			{
 				Name:        "data_type",
