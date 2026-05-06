@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -71,7 +72,7 @@ func tableAwsSSMParameter(_ context.Context) *plugin.Table {
 				Name:        "arn",
 				Description: "The Amazon Resource Name (ARN) of the parameter.",
 				Type:        proto.ColumnType_STRING,
-				Hydrate:     getAwsSSMParameterAkas,
+				Hydrate:     buildParameterARN,
 				Transform:   transform.FromValue(),
 			},
 			{
@@ -331,7 +332,7 @@ func getAwsSSMParameterTags(ctx context.Context, d *plugin.QueryData, h *plugin.
 	return op, nil
 }
 
-func getAwsSSMParameterAkas(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+func buildParameterARN(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (any, error) {
 	region := d.EqualsQualString(matrixKeyRegion)
 	parameterData := h.Item.(types.ParameterMetadata)
 
@@ -349,7 +350,21 @@ func getAwsSSMParameterAkas(ctx context.Context, d *plugin.QueryData, h *plugin.
 		aka = aka + "/" + *parameterData.Name
 	}
 
-	return []string{aka}, nil
+	return aka, nil
+}
+
+func getAwsSSMParameterAkas(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	arnI, err := buildParameterARN(ctx, d, h)
+	if err != nil {
+		return nil, err
+	}
+
+	arn, ok := arnI.(string)
+	if !ok {
+		return nil, fmt.Errorf(`arn parameter "%s" not a string`, arnI)
+	}
+
+	return []string{arn}, nil
 }
 
 //// TRANSFORM FUNCTIONS
