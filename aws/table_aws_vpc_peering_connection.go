@@ -217,6 +217,7 @@ func listVpcPeeringConnections(ctx context.Context, d *plugin.QueryData, _ *plug
 		o.StopOnDuplicateToken = true
 	})
 
+	region := d.EqualsQualString("region")
 	for paginator.HasMorePages() {
 		// apply rate limiting
 		d.WaitForListRateLimit(ctx)
@@ -228,6 +229,11 @@ func listVpcPeeringConnections(ctx context.Context, d *plugin.QueryData, _ *plug
 		}
 
 		for _, items := range output.VpcPeeringConnections {
+			// Only stream if this region is the requester's region, to avoid cross-region duplicates
+			if items.RequesterVpcInfo != nil && items.RequesterVpcInfo.Region != nil && *items.RequesterVpcInfo.Region != region {
+				continue
+			}
+
 			d.StreamListItem(ctx, items)
 
 			// Context can be cancelled due to manual cancellation or the limit has been hit
