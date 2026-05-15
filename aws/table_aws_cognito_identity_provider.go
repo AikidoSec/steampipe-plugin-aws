@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
@@ -233,8 +234,29 @@ func getCognitoIdentityProvider(ctx context.Context, d *plugin.QueryData, h *plu
 
 func getCognitoIdentityProviderTurbotAkas(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
 	region := d.EqualsQualString(matrixKeyRegion)
-	userPoolId := d.EqualsQualString("user_pool_id")
-	data := h.Item.(identityProviderInfo)
+	var providerName, userPoolId string
+
+	switch item := h.Item.(type) {
+	// List call streams only the provider description and user pool id via identityProviderInfo
+	case identityProviderInfo:
+		if item.ProviderName != nil {
+			providerName = *item.ProviderName
+		}
+		if item.UserPoolId != nil {
+			userPoolId = *item.UserPoolId
+		}
+	case types.IdentityProviderType:
+		if item.ProviderName != nil {
+			providerName = *item.ProviderName
+		}
+		if item.UserPoolId != nil {
+			userPoolId = *item.UserPoolId
+		}
+	}
+
+	if providerName == "" || userPoolId == "" {
+		return nil, fmt.Errorf("error getting Cognito identity provider info")
+	}
 
 	// Get common columns
 	c, err := getCommonColumns(ctx, d, h)
@@ -246,7 +268,7 @@ func getCognitoIdentityProviderTurbotAkas(ctx context.Context, d *plugin.QueryDa
 
 	// Get data for turbot defined properties
 	//arn:aws:cognito-idp:<region>:<account-id>:userpool/<id>/provider/<name>
-	arn := "arn:" + commonColumnData.Partition + ":cognito-idp:" + region + ":" + commonColumnData.AccountId + ":userpool/" + userPoolId + "/provider/" + *data.ProviderName
+	arn := "arn:" + commonColumnData.Partition + ":cognito-idp:" + region + ":" + commonColumnData.AccountId + ":userpool/" + userPoolId + "/provider/" + providerName
 
 	return []string{arn}, nil
 }
