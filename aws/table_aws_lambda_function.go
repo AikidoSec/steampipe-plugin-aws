@@ -241,6 +241,12 @@ func tableAwsLambdaFunction(_ context.Context) *plugin.Table {
 				Transform:   transform.FromField("Policy").Transform(unescape).Transform(policyToCanonical),
 			},
 			{
+				Name:        "tenancy_config",
+				Description: "The function's tenancy configuration",
+				Type:        proto.ColumnType_JSON,
+				Transform:   transform.FromField("Configuration.TenancyConfig", "TenancyConfig"),
+			},
+			{
 				Name:        "tracing_config",
 				Description: "The function's X-Ray tracing configuration.",
 				Type:        proto.ColumnType_JSON,
