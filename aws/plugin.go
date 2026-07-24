@@ -430,6 +430,7 @@ func Plugin(ctx context.Context) *plugin.Plugin {
 			"aws_eventbridge_bus":                                          tableAwsEventBridgeBus(ctx),
 			"aws_eventbridge_rule":                                         tableAwsEventBridgeRule(ctx),
 			"aws_fms_app_list":                                             tableAwsFMSAppList(ctx),
+			"aws_fms_compliance_details":                                   tableAwsFMSComplianceDetails(ctx),
 			"aws_fms_policy":                                               tableAwsFMSPolicy(ctx),
 			"aws_fsx_file_system":                                          tableAwsFsxFileSystem(ctx),
 			"aws_glacier_vault":                                            tableAwsGlacierVault(ctx),
