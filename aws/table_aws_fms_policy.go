@@ -236,8 +236,14 @@ func getFmsPolicy(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 	policyId := ""
 
 	if h.Item != nil {
-		data := h.Item.(types.PolicySummary)
-		policyId = *data.PolicyId
+		switch item := h.Item.(type) {
+		case PolicyInfo:
+			policyId = aws.ToString(item.PolicyId)
+		case *PolicyInfo:
+			policyId = aws.ToString(item.PolicyId)
+		case types.PolicySummary:
+			policyId = aws.ToString(item.PolicyId)
+		}
 	} else {
 		policyId = d.EqualsQualString("policy_id")
 	}
