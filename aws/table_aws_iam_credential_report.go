@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -207,26 +208,11 @@ func listCredentialReports(ctx context.Context, d *plugin.QueryData, _ *plugin.H
 		return nil, err
 	}
 
-	resp, err := svc.GetCredentialReport(ctx, &iam.GetCredentialReportInput{})
+	resp, err := getCredentialReport(ctx, svc)
 	if err != nil {
-		var ae smithy.APIError
-		if errors.As(err, &ae) {
-			if ae.ErrorCode() == "ReportNotPresent" {
-				return nil, errors.New("credential report not available. Please run 'aws iam generate-credential-report' to generate it and try again")
-			}
-		}
 		plugin.Logger(ctx).Error("aws_iam_credential_report.listCredentialReports", "api_error", err)
 		return nil, err
 	}
-	//if err != nil {
-	//	if err.Error() == "ReportExpired" {
-	//		return nil, errors.New("Existing credential report expired. Requested generation of report - please try again shortly")
-	//	}
-	//	if err.Error() == "ReportInProgress" {
-	//		return nil, errors.New("Credential report generation in progress. Please try again shortly")
-	//	}
-	//	return nil, err
-	//}
 
 	content := string(resp.Content[:])
 
@@ -248,6 +234,65 @@ func listCredentialReports(ctx context.Context, d *plugin.QueryData, _ *plugin.H
 	}
 
 	return nil, nil
+}
+
+// getCredentialReport fetches the IAM credential report, triggering its generation
+// and waiting for it to become available if it doesn't exist yet or has expired.
+func getCredentialReport(ctx context.Context, svc *iam.Client) (*iam.GetCredentialReportOutput, error) {
+	const (
+		maxWait      = 2 * time.Minute
+		pollInterval = 2 * time.Second
+	)
+
+	waitCtx, cancel := context.WithTimeout(ctx, maxWait)
+	defer cancel()
+
+	generationRequested := false
+
+	for {
+		resp, err := svc.GetCredentialReport(waitCtx, &iam.GetCredentialReportInput{})
+		if err == nil {
+			return resp, nil
+		}
+
+		// Distinguish our internal wait cap from a caller cancellation so
+		// cloud-security only retries on the latter.
+		if ctx.Err() == nil && waitCtx.Err() != nil {
+			return nil, fmt.Errorf("credential report not available after waiting %s", maxWait)
+		}
+
+		var ae smithy.APIError
+		if !errors.As(err, &ae) {
+			return nil, err
+		}
+
+		switch ae.ErrorCode() {
+		case "ReportNotPresent", "ReportExpired":
+			if !generationRequested {
+				if _, genErr := svc.GenerateCredentialReport(waitCtx, &iam.GenerateCredentialReportInput{}); genErr != nil {
+					if ctx.Err() == nil && waitCtx.Err() != nil {
+						return nil, fmt.Errorf("credential report not available after waiting %s", maxWait)
+					}
+					return nil, genErr
+				}
+				generationRequested = true
+			}
+		case "ReportInProgress":
+			// Report generation is already underway (either triggered by us or
+			// another caller) - keep polling until it completes.
+		default:
+			return nil, err
+		}
+
+		select {
+		case <-waitCtx.Done():
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("credential report not available after waiting %s", maxWait)
+		case <-time.After(pollInterval):
+		}
+	}
 }
 
 //// TRANSFORM FUNCTIONS
