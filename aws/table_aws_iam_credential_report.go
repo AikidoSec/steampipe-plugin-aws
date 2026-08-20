@@ -244,7 +244,9 @@ func getCredentialReport(ctx context.Context, svc *iam.Client) (*iam.GetCredenti
 		pollInterval = 2 * time.Second
 	)
 
-	deadline := time.Now().Add(maxWait)
+	ctx, cancel := context.WithTimeout(ctx, maxWait)
+	defer cancel()
+
 	generationRequested := false
 
 	for {
@@ -273,13 +275,9 @@ func getCredentialReport(ctx context.Context, svc *iam.Client) (*iam.GetCredenti
 			return nil, err
 		}
 
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("timed out waiting for credential report to become available: %w", err)
-		}
-
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("timed out waiting for credential report to become available: %w", ctx.Err())
 		case <-time.After(pollInterval):
 		}
 	}
