@@ -244,15 +244,21 @@ func getCredentialReport(ctx context.Context, svc *iam.Client) (*iam.GetCredenti
 		pollInterval = 2 * time.Second
 	)
 
-	ctx, cancel := context.WithTimeout(ctx, maxWait)
+	waitCtx, cancel := context.WithTimeout(ctx, maxWait)
 	defer cancel()
 
 	generationRequested := false
 
 	for {
-		resp, err := svc.GetCredentialReport(ctx, &iam.GetCredentialReportInput{})
+		resp, err := svc.GetCredentialReport(waitCtx, &iam.GetCredentialReportInput{})
 		if err == nil {
 			return resp, nil
+		}
+
+		// Distinguish our internal wait cap from a caller cancellation so
+		// cloud-security only retries on the latter.
+		if ctx.Err() == nil && waitCtx.Err() != nil {
+			return nil, fmt.Errorf("credential report not available after waiting %s", maxWait)
 		}
 
 		var ae smithy.APIError
@@ -263,7 +269,10 @@ func getCredentialReport(ctx context.Context, svc *iam.Client) (*iam.GetCredenti
 		switch ae.ErrorCode() {
 		case "ReportNotPresent", "ReportExpired":
 			if !generationRequested {
-				if _, genErr := svc.GenerateCredentialReport(ctx, &iam.GenerateCredentialReportInput{}); genErr != nil {
+				if _, genErr := svc.GenerateCredentialReport(waitCtx, &iam.GenerateCredentialReportInput{}); genErr != nil {
+					if ctx.Err() == nil && waitCtx.Err() != nil {
+						return nil, fmt.Errorf("credential report not available after waiting %s", maxWait)
+					}
 					return nil, genErr
 				}
 				generationRequested = true
@@ -276,8 +285,11 @@ func getCredentialReport(ctx context.Context, svc *iam.Client) (*iam.GetCredenti
 		}
 
 		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("timed out waiting for credential report to become available: %w", ctx.Err())
+		case <-waitCtx.Done():
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("credential report not available after waiting %s", maxWait)
 		case <-time.After(pollInterval):
 		}
 	}
