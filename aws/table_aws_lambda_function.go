@@ -43,6 +43,10 @@ func tableAwsLambdaFunction(_ context.Context) *plugin.Table {
 				Func: getLambdaFunctionUrlConfig,
 				Tags: map[string]string{"service": "lambda", "action": "GetFunctionUrlConfig"},
 			},
+			{
+				Func: getFunctionEventInvokeConfig,
+				Tags: map[string]string{"service": "lambda", "action": "GetFunctionEventInvokeConfig"},
+			},
 		},
 		Columns: awsRegionalColumns([]*plugin.Column{
 			{
@@ -245,6 +249,13 @@ func tableAwsLambdaFunction(_ context.Context) *plugin.Table {
 				Description: "The function's tenancy configuration",
 				Type:        proto.ColumnType_JSON,
 				Transform:   transform.FromField("Configuration.TenancyConfig", "TenancyConfig"),
+			},
+			{
+				Name:        "function_event_invoke_config",
+				Description: "The function's asynchronous invocation configuration, including maximum retry attempts, maximum event age, and destination configuration.",
+				Type:        proto.ColumnType_JSON,
+				Hydrate:     getFunctionEventInvokeConfig,
+				Transform:   transform.FromValue(),
 			},
 			{
 				Name:        "tracing_config",
@@ -493,6 +504,40 @@ func getLambdaFunctionUrlConfig(ctx context.Context, d *plugin.QueryData, h *plu
 	}
 
 	return urlConfigs, nil
+}
+
+func getFunctionEventInvokeConfig(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	functionName := functionName(h.Item)
+
+	// Create Session
+	svc, err := LambdaClient(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+
+	if svc == nil {
+		// Unsupported region check
+		return nil, nil
+	}
+
+	input := &lambda.GetFunctionEventInvokeConfigInput{
+		FunctionName: aws.String(functionName),
+	}
+
+	eventInvokeConfig, err := svc.GetFunctionEventInvokeConfig(ctx, input)
+	if err != nil {
+		var ae smithy.APIError
+		if errors.As(err, &ae) {
+			// If the function does not have an explicit async invocation config, the operation returns a 404 (ResourceNotFoundException) error.
+			if ae.ErrorCode() == "ResourceNotFoundException" {
+				return nil, nil
+			}
+		}
+		plugin.Logger(ctx).Error("aws_lambda_function.getFunctionEventInvokeConfig", "api_error", err)
+		return nil, err
+	}
+
+	return eventInvokeConfig, nil
 }
 
 func functionName(item interface{}) string {
