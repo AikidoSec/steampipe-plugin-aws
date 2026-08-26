@@ -285,3 +285,24 @@ from
 where
   json_extract(tracing_config, '$.Mode') = 'PassThrough';
 ```
+
+### List maximum retry attempts for asynchronous invocations
+Review the asynchronous invocation configuration for each AWS Lambda function. A function with no explicit configuration returns a null `function_event_invoke_config`, in which case AWS applies its default of 2 retry attempts, so use `coalesce` to reflect the effective value rather than treating null as unknown.
+
+```sql+postgres
+select
+  name,
+  arn,
+  coalesce((function_event_invoke_config ->> 'MaximumRetryAttempts')::int, 2) as max_retry_attempts
+from
+  aws_lambda_function;
+```
+
+```sql+sqlite
+select
+  name,
+  arn,
+  coalesce(json_extract(function_event_invoke_config, '$.MaximumRetryAttempts'), 2) as max_retry_attempts
+from
+  aws_lambda_function;
+```
