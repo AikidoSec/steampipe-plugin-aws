@@ -20,6 +20,7 @@ type awsConfig struct {
 	IgnoreErrorCodes      []string `hcl:"ignore_error_codes,optional"`
 	EndpointUrl           *string  `hcl:"endpoint_url"`
 	S3ForcePathStyle      *bool    `hcl:"s3_force_path_style"`
+	PartnerProductCode    *string  `hcl:"partner_product_code"`
 }
 
 func ConfigInstance() interface{} {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -156,6 +157,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/wellarchitected"
 	"github.com/aws/aws-sdk-go-v2/service/workspaces"
 	"github.com/aws/smithy-go/logging"
+	smithymiddleware "github.com/aws/smithy-go/middleware"
 	"github.com/hashicorp/go-hclog"
 	"github.com/rs/dnscache"
 	"github.com/turbot/go-kit/helpers"
@@ -2020,6 +2022,7 @@ func getClientWithMaxRetries(ctx context.Context, d *plugin.QueryData, region st
 			}
 			newCfg.Retryer = cfg.Retryer
 			newCfg.Region = cfg.Region
+			newCfg.APIOptions = cfg.APIOptions
 			cfg = newCfg
 		}
 	}
@@ -2195,6 +2198,14 @@ var sharedHTTPClient = initializeHTTPClient()
 // using the IDMS service etc.
 var getBaseClientForAccountCached = plugin.HydrateFunc(getBaseClientForAccountUncached).Memoize(memoize.WithTtl(time.Hour * 24 * 30))
 
+// awsPartnerUserAgentKey and awsPartnerProductCodeFormat build the AWS Partner Revenue
+// Measurement user-agent tag from a bare partner product code, per AWS's required
+// "APN_1.1/pc_<PRODUCT-CODE>$" format.
+const (
+	awsPartnerUserAgentKey      = "APN_1.1"
+	awsPartnerProductCodeFormat = "pc_%s$"
+)
+
 // Do the actual work of creating an AWS config object for reuse across many
 // regions. This client has the minimal reusable configuration on it, so it
 // can be modified in the higher level client functions.
@@ -2270,6 +2281,13 @@ func getBaseClientForAccountUncached(ctx context.Context, d *plugin.QueryData, h
 	// }))
 
 	configOptions = append(configOptions, config.WithHTTPClient(sharedHTTPClient))
+
+	if awsSpcConfig.PartnerProductCode != nil && *awsSpcConfig.PartnerProductCode != "" {
+		plugin.Logger(ctx).Debug("getBaseClientForAccountUncached", "connection_name", d.Connection.Name, "status", "partner_user_agent_applied")
+		configOptions = append(configOptions, config.WithAPIOptions([]func(*smithymiddleware.Stack) error{
+			awsmiddleware.AddUserAgentKeyValue(awsPartnerUserAgentKey, fmt.Sprintf(awsPartnerProductCodeFormat, *awsSpcConfig.PartnerProductCode)),
+		}))
+	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, configOptions...)
 	if err != nil {
