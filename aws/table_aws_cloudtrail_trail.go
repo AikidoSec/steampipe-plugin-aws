@@ -355,7 +355,7 @@ func getCloudtrailTrailStatus(ctx context.Context, d *plugin.QueryData, h *plugi
 	if err != nil {
 		var ae smithy.APIError
 		if errors.As(err, &ae) {
-			if slices.Contains([]string{"TrailNotFoundException", "CloudTrailARNInvalidException"}, ae.ErrorCode()) {
+			if slices.Contains([]string{"TrailNotFoundException", "CloudTrailARNInvalidException", "ResourceNotFoundException"}, ae.ErrorCode()) {
 				return nil, nil
 			}
 		}
@@ -398,7 +398,7 @@ func getCloudtrailTrailEventSelector(ctx context.Context, d *plugin.QueryData, h
 	if err != nil {
 		var ae smithy.APIError
 		if errors.As(err, &ae) {
-			if slices.Contains([]string{"TrailNotFoundException", "CloudTrailARNInvalidException"}, ae.ErrorCode()) {
+			if slices.Contains([]string{"TrailNotFoundException", "CloudTrailARNInvalidException", "ResourceNotFoundException"}, ae.ErrorCode()) {
 				return nil, nil
 			}
 		}
@@ -440,7 +440,7 @@ func getCloudtrailTrailInsightSelector(ctx context.Context, d *plugin.QueryData,
 	if err != nil {
 		var ae smithy.APIError
 		if errors.As(err, &ae) {
-			if slices.Contains([]string{"InsightNotEnabledException"}, ae.ErrorCode()) {
+			if slices.Contains([]string{"InsightNotEnabledException", "ResourceNotFoundException", "TrailNotFoundException"}, ae.ErrorCode()) {
 				return nil, nil
 			}
 		}
@@ -483,7 +483,7 @@ func getCloudtrailTrailTags(ctx context.Context, d *plugin.QueryData, h *plugin.
 	if err != nil {
 		var ae smithy.APIError
 		if errors.As(err, &ae) {
-			if slices.Contains([]string{"TrailNotFoundException", "CloudTrailARNInvalidException"}, ae.ErrorCode()) {
+			if slices.Contains([]string{"TrailNotFoundException", "CloudTrailARNInvalidException", "ResourceNotFoundException"}, ae.ErrorCode()) {
 				return nil, nil
 			}
 		}
