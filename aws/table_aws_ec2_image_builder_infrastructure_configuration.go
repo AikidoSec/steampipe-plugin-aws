@@ -14,7 +14,7 @@ import (
 
 func tableAwsEc2ImageBuilderInfrastructureConfiguration(_ context.Context) *plugin.Table {
 	return &plugin.Table{
-		GetMatrixItemFunc: AllRegionsMatrix,
+		GetMatrixItemFunc: SupportedRegionMatrix(AWS_EC2_SERVICE_ID),
 		Name:              "aws_ec2_image_builder_infrastructure_configuration",
 		Description:       "AWS EC2 Image Builder Infrastructure Configuration",
 		Get: &plugin.GetConfig{
