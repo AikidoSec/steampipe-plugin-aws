@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
@@ -56,6 +57,12 @@ func tableAwsEcsService(_ context.Context) *plugin.Table {
 				Name:        "cluster_arn",
 				Description: "The Amazon Resource Name (ARN) of the cluster that hosts the service.",
 				Type:        proto.ColumnType_STRING,
+			},
+			{
+				Name:        "autoscaling_resource_id",
+				Description: "The Application Auto Scaling resource ID, in the format service/cluster-name/service-name.",
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.From(getEcsServiceAutoscalingResourceID),
 			},
 			{
 				Name:        "task_definition",
@@ -388,4 +395,22 @@ func getEcsServiceTurbotTags(_ context.Context, d *transform.TransformData) (int
 		turbotTagsMap[*i.Key] = *i.Value
 	}
 	return turbotTagsMap, nil
+}
+
+// ECS Service ARNs have two formats (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-arn-migration.html).
+// Autoscaler resource ID filter requires a long format value so we use the cluster ARN and service name to compute that filter value.
+func getEcsServiceAutoscalingResourceID(_ context.Context, d *transform.TransformData) (interface{}, error) {
+	service := d.HydrateItem.(types.Service)
+	clusterARN := aws.ToString(service.ClusterArn)
+	serviceName := aws.ToString(service.ServiceName)
+	if serviceName == "" || clusterARN == "" {
+		return nil, nil
+	}
+
+	separator := strings.LastIndex(clusterARN, "/")
+	if separator < 0 {
+		return nil, nil
+	}
+
+	return "service/" + clusterARN[separator+1:] + "/" + serviceName, nil
 }
