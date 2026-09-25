@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/emr"
@@ -30,7 +31,7 @@ func tableAwsEmrCluster(_ context.Context) *plugin.Table {
 			Hydrate: listEmrClusters,
 			Tags:    map[string]string{"service": "elasticmapreduce", "action": "ListClusters"},
 			KeyColumns: []*plugin.KeyColumn{
-				{Name: "state", Require: plugin.Optional},
+				{Name: "state", Require: plugin.Required},
 			},
 		},
 		GetMatrixItemFunc: SupportedRegionMatrix(AWS_ELASTICMAPREDUCE_SERVICE_ID),
@@ -289,11 +290,17 @@ func listEmrClusters(ctx context.Context, d *plugin.QueryData, _ *plugin.Hydrate
 
 	input := &emr.ListClustersInput{}
 
-	euqalQuals := d.EqualsQuals
-	if euqalQuals["state"] != nil {
-		input.ClusterStates = []types.ClusterState{
-			types.ClusterState(euqalQuals["state"].GetStringValue()),
+	if d.EqualsQuals["state"] != nil {
+		statesList := strings.Split(d.EqualsQualString("state"), ",")
+
+		states := make([]types.ClusterState, len(statesList))
+		for i, v := range statesList {
+			states[i] = types.ClusterState(v)
 		}
+
+		input.ClusterStates = states
+	} else {
+		return nil, nil
 	}
 
 	paginator := emr.NewListClustersPaginator(svc, input, func(o *emr.ListClustersPaginatorOptions) {

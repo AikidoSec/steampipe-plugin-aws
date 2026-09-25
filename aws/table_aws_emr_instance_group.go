@@ -21,9 +21,11 @@ func tableAwsEmrInstanceGroup(_ context.Context) *plugin.Table {
 		Name:        "aws_emr_instance_group",
 		Description: "AWS EMR Instance Group",
 		List: &plugin.ListConfig{
-			ParentHydrate: listEmrClusters,
-			Hydrate:       listEmrInstanceGroups,
-			Tags:          map[string]string{"service": "elasticmapreduce", "action": "ListInstanceGroups"},
+			Hydrate: listEmrInstanceGroups,
+			Tags:    map[string]string{"service": "elasticmapreduce", "action": "ListInstanceGroups"},
+			KeyColumns: []*plugin.KeyColumn{
+				{Name: "cluster_id", Require: plugin.Required},
+			},
 		},
 		GetMatrixItemFunc: SupportedRegionMatrix(AWS_ELASTICMAPREDUCE_SERVICE_ID),
 		Columns: awsRegionalColumns([]*plugin.Column{
@@ -182,11 +184,13 @@ func listEmrInstanceGroups(ctx context.Context, d *plugin.QueryData, h *plugin.H
 		return nil, nil
 	}
 
-	// Get cluster details
-	clusterID := h.Item.(types.ClusterSummary).Id
+	clusterID := d.EqualsQualString("cluster_id")
+	if clusterID == "" {
+		return nil, nil
+	}
 
 	input := &emr.ListInstanceGroupsInput{
-		ClusterId: clusterID,
+		ClusterId: &clusterID,
 	}
 
 	paginator := emr.NewListInstanceGroupsPaginator(svc, input, func(o *emr.ListInstanceGroupsPaginatorOptions) {
@@ -211,7 +215,7 @@ func listEmrInstanceGroups(ctx context.Context, d *plugin.QueryData, h *plugin.H
 		}
 
 		for _, items := range output.InstanceGroups {
-			d.StreamListItem(ctx, instanceGroupDetails{items, *clusterID})
+			d.StreamListItem(ctx, instanceGroupDetails{items, clusterID})
 
 			// Context can be cancelled due to manual cancellation or the limit has been hit
 			if d.RowsRemaining(ctx) == 0 {
