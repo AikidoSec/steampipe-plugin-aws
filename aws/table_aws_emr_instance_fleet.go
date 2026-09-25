@@ -21,11 +21,13 @@ func tableAwsEmrInstanceFleet(_ context.Context) *plugin.Table {
 		Name:        "aws_emr_instance_fleet",
 		Description: "AWS EMR Instance Fleet",
 		List: &plugin.ListConfig{
-			ParentHydrate: listEmrClusters,
-			Hydrate:       listEmrInstanceFleets,
-			Tags:          map[string]string{"service": "elasticmapreduce", "action": "ListInstanceFleets"},
+			Hydrate: listEmrInstanceFleets,
+			Tags:    map[string]string{"service": "elasticmapreduce", "action": "ListInstanceFleets"},
 			IgnoreConfig: &plugin.IgnoreConfig{
 				ShouldIgnoreErrorFunc: shouldIgnoreErrors([]string{"InvalidRequestException"}),
+			},
+			KeyColumns: []*plugin.KeyColumn{
+				{Name: "cluster_id", Require: plugin.Required},
 			},
 		},
 		GetMatrixItemFunc: SupportedRegionMatrix(AWS_ELASTICMAPREDUCE_SERVICE_ID),
@@ -149,10 +151,13 @@ func listEmrInstanceFleets(ctx context.Context, d *plugin.QueryData, h *plugin.H
 		return nil, nil
 	}
 
-	// Get cluster details
-	clusterID := h.Item.(types.ClusterSummary).Id
+	clusterID := d.EqualsQualString("cluster_id")
+	if clusterID == "" {
+		return nil, nil
+	}
+
 	input := &emr.ListInstanceFleetsInput{
-		ClusterId: clusterID,
+		ClusterId: &clusterID,
 	}
 
 	paginator := emr.NewListInstanceFleetsPaginator(svc, input, func(o *emr.ListInstanceFleetsPaginatorOptions) {
@@ -178,7 +183,7 @@ func listEmrInstanceFleets(ctx context.Context, d *plugin.QueryData, h *plugin.H
 		}
 
 		for _, instanceFleet := range output.InstanceFleets {
-			d.StreamListItem(ctx, instanceFleetDetails{instanceFleet, *clusterID})
+			d.StreamListItem(ctx, instanceFleetDetails{instanceFleet, clusterID})
 
 			// Context can be cancelled due to manual cancellation or the limit has been hit
 			if d.RowsRemaining(ctx) == 0 {

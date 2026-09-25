@@ -19,11 +19,10 @@ func tableAwsEmrInstance(_ context.Context) *plugin.Table {
 		Name:        "aws_emr_instance",
 		Description: "AWS EMR Instance",
 		List: &plugin.ListConfig{
-			ParentHydrate: listEmrClusters,
-			Hydrate:       listEmrInstances,
-			Tags:          map[string]string{"service": "elasticmapreduce", "action": "ListInstances"},
+			Hydrate: listEmrInstances,
+			Tags:    map[string]string{"service": "elasticmapreduce", "action": "ListInstances"},
 			KeyColumns: []*plugin.KeyColumn{
-				{Name: "cluster_id", Require: plugin.Optional},
+				{Name: "cluster_id", Require: plugin.Required},
 				{Name: "instance_fleet_id", Require: plugin.Optional},
 				{Name: "instance_group_id", Require: plugin.Optional},
 			},
@@ -157,19 +156,13 @@ func listEmrInstances(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrat
 		return nil, nil
 	}
 
-	// Get cluster details
-	clusterID := h.Item.(types.ClusterSummary).Id
-
-	if d.EqualsQualString("cluster_id") != "" && d.EqualsQualString("cluster_id") != *clusterID {
+	clusterID := d.EqualsQualString("cluster_id")
+	if clusterID == "" {
 		return nil, nil
 	}
 
-	if d.EqualsQualString("cluster_id") != "" {
-		clusterID = aws.String(d.EqualsQualString("cluster_id"))
-	}
-
 	input := &emr.ListInstancesInput{
-		ClusterId: clusterID,
+		ClusterId: &clusterID,
 	}
 
 	if d.EqualsQualString("instance_fleet_id") != "" {
@@ -197,7 +190,7 @@ func listEmrInstances(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrat
 		for _, instance := range output.Instances {
 			d.StreamListItem(ctx, &emrInstanceInfo{
 				Instance:  instance,
-				ClusterId: clusterID,
+				ClusterId: &clusterID,
 			})
 
 			// Context can be cancelled due to manual cancellation or the limit has been hit
