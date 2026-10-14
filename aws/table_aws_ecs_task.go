@@ -2,11 +2,15 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/turbot/steampipe-plugin-sdk/v5/grpc/proto"
 	"github.com/turbot/steampipe-plugin-sdk/v5/plugin"
@@ -46,6 +50,10 @@ func tableAwsEcsTask(_ context.Context) *plugin.Table {
 			},
 		},
 		HydrateConfig: []plugin.HydrateConfig{
+			{
+				Func: getEcsTaskNetworkConfiguration,
+				Tags: map[string]string{"service": "ec2", "action": "DescribeNetworkInterfaces"},
+			},
 			{
 				Func: getEcsTaskProtection,
 				Tags: map[string]string{"service": "ecs", "action": "GetTaskProtection"},
@@ -211,6 +219,13 @@ func tableAwsEcsTask(_ context.Context) *plugin.Table {
 				Name:        "version",
 				Description: "The version counter for the task.",
 				Type:        proto.ColumnType_INT,
+			},
+			{
+				Name:        "network_configuration",
+				Description: "The task's actual awsvpc subnet, security groups and public IP assignment, derived from its network interfaces. Requires ec2:DescribeNetworkInterfaces.",
+				Type:        proto.ColumnType_JSON,
+				Hydrate:     getEcsTaskNetworkConfiguration,
+				Transform:   transform.FromValue(),
 			},
 			{
 				Name:        "attachments",
@@ -518,4 +533,72 @@ func join(parts ...string) string {
 		}
 	}
 	return strings.Join(clean, " / ")
+}
+
+// Tasks do not expose NetworkConfiguration so we use their ENIs rather than the service configuration.
+func getEcsTaskNetworkConfiguration(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	task := h.Item.(types.Task)
+	ids := ecsTaskNetworkInterfaceIDs(task)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	svc, err := EC2Client(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	output, err := svc.DescribeNetworkInterfaces(ctx, &ec2.DescribeNetworkInterfacesInput{NetworkInterfaceIds: ids})
+	if err != nil {
+		var apiError smithy.APIError
+		if errors.As(err, &apiError) && (apiError.ErrorCode() == "InvalidNetworkInterfaceID.NotFound" || apiError.ErrorCode() == "InvalidNetworkInterfaceID.Unavailable") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return ecsTaskNetworkConfiguration(output.NetworkInterfaces), nil
+}
+
+func ecsTaskNetworkInterfaceIDs(task types.Task) []string {
+	var ids []string
+	for _, attachment := range task.Attachments {
+		if aws.ToString(attachment.Type) != "ElasticNetworkInterface" {
+			continue
+		}
+		for _, detail := range attachment.Details {
+			if aws.ToString(detail.Name) == "networkInterfaceId" && aws.ToString(detail.Value) != "" {
+				ids = append(ids, *detail.Value)
+			}
+		}
+	}
+	return ids
+}
+
+func ecsTaskNetworkConfiguration(interfaces []ec2types.NetworkInterface) *types.NetworkConfiguration {
+	if len(interfaces) == 0 {
+		return nil
+	}
+	config := &types.AwsVpcConfiguration{AssignPublicIp: types.AssignPublicIpDisabled, Subnets: []string{}, SecurityGroups: []string{}}
+	uniqueSubnets, uniqueGroups := map[string]struct{}{}, map[string]struct{}{}
+	for _, networkInterface := range interfaces {
+		if subnet := aws.ToString(networkInterface.SubnetId); subnet != "" {
+			_, ok := uniqueSubnets[subnet]
+			if !ok {
+				uniqueSubnets[subnet] = struct{}{}
+				config.Subnets = append(config.Subnets, subnet)
+			}
+		}
+		for _, group := range networkInterface.Groups {
+			if id := aws.ToString(group.GroupId); id != "" {
+				_, ok := uniqueGroups[id]
+				if !ok {
+					uniqueGroups[id] = struct{}{}
+					config.SecurityGroups = append(config.SecurityGroups, id)
+				}
+			}
+		}
+		if networkInterface.Association != nil && aws.ToString(networkInterface.Association.PublicIp) != "" {
+			config.AssignPublicIp = types.AssignPublicIpEnabled
+		}
+	}
+	return &types.NetworkConfiguration{AwsvpcConfiguration: config}
 }
