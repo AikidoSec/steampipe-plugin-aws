@@ -550,7 +550,7 @@ func getEcsTaskNetworkConfiguration(ctx context.Context, d *plugin.QueryData, h 
 	output, err := svc.DescribeNetworkInterfaces(ctx, &ec2.DescribeNetworkInterfacesInput{NetworkInterfaceIds: ids})
 	if err != nil {
 		var apiError smithy.APIError
-		if errors.As(err, &apiError) && apiError.ErrorCode() == "InvalidNetworkInterfaceID.NotFound" {
+		if errors.As(err, &apiError) && (apiError.ErrorCode() == "InvalidNetworkInterfaceID.NotFound" || apiError.ErrorCode() == "InvalidNetworkInterfaceID.Unavailable") {
 			return nil, nil
 		}
 		return nil, err
