@@ -352,12 +352,10 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 			continue
 		}
 
-		input := ecs.ListTasksInput{
-			Cluster:       clusterArn,
-			DesiredStatus: status,
-		}
+		listInput := input
+		listInput.DesiredStatus = status
 
-		paginator := ecs.NewListTasksPaginator(svc, &input, func(o *ecs.ListTasksPaginatorOptions) {
+		paginator := ecs.NewListTasksPaginator(svc, &listInput, func(o *ecs.ListTasksPaginatorOptions) {
 			o.Limit = maxLimit
 			o.StopOnDuplicateToken = true
 		})
