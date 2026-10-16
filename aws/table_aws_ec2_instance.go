@@ -174,6 +174,12 @@ func tableAwsEc2Instance(_ context.Context) *plugin.Table {
 				Transform:   transform.FromField("CpuOptions.CoreCount"),
 			},
 			{
+				Name:        "cpu_options_nested_virtualization",
+				Description: "Indicates whether the instance is enabled for nested virtualization. Empty when the API does not report the setting.",
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("CpuOptions.NestedVirtualization"),
+			},
+			{
 				Name:        "cpu_options_threads_per_core",
 				Description: "The number of threads per CPU core.",
 				Type:        proto.ColumnType_INT,
