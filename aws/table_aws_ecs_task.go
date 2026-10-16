@@ -319,8 +319,9 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 		containerInstanceArn := equalQuals["container_instance_arn"].GetStringValue()
 		input.ContainerInstance = aws.String(containerInstanceArn)
 	}
-	if equalQuals["desired_status"] != nil {
-		desiredStatus := equalQuals["desired_status"].GetStringValue()
+
+	desiredStatus := equalQuals["desired_status"].GetStringValue()
+	if desiredStatus != "" {
 		input.DesiredStatus = types.DesiredStatus(desiredStatus)
 	}
 	if equalQuals["launch_type"] != nil {
@@ -343,50 +344,62 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 
 	input.MaxResults = &maxLimit
 
-	paginator := ecs.NewListTasksPaginator(svc, &input, func(o *ecs.ListTasksPaginatorOptions) {
-		o.Limit = maxLimit
-		o.StopOnDuplicateToken = true
-	})
-
-	// List call
-	for paginator.HasMorePages() {
-		// apply rate limiting
-		d.WaitForListRateLimit(ctx)
-
-		output, err := paginator.NextPage(ctx)
-		if err != nil {
-			// Error could not be caught by ignore config, we need to handle it manually
-			if strings.Contains(err.Error(), "ServiceNotFoundException") {
-				return nil, nil
-			}
-			plugin.Logger(ctx).Error("aws_ecs_task.listEcsTasks", "list_tasks_api_error", err)
-			return nil, err
-		}
-
-		if len(output.TaskArns) == 0 {
+	for _, status := range []types.DesiredStatus{
+		types.DesiredStatusRunning,
+		types.DesiredStatusStopped,
+	} {
+		if desiredStatus != "" && desiredStatus != string(status) {
 			continue
 		}
 
-		d.WaitForListRateLimit(ctx)
+		listInput := input
+		listInput.DesiredStatus = status
 
-		describeInput := &ecs.DescribeTasksInput{
-			Cluster: clusterArn,
-			Tasks:   output.TaskArns,
-			Include: []types.TaskField{types.TaskFieldTags},
-		}
+		paginator := ecs.NewListTasksPaginator(svc, &listInput, func(o *ecs.ListTasksPaginatorOptions) {
+			o.Limit = maxLimit
+			o.StopOnDuplicateToken = true
+		})
 
-		result, err := svc.DescribeTasks(ctx, describeInput)
-		if err != nil {
-			plugin.Logger(ctx).Error("aws_ecs_task.listEcsTasks", "describe_tasks_api_error", err)
-			return nil, err
-		}
+		// List call
+		for paginator.HasMorePages() {
+			// apply rate limiting
+			d.WaitForListRateLimit(ctx)
 
-		for _, task := range result.Tasks {
-			d.StreamListItem(ctx, task)
+			output, err := paginator.NextPage(ctx)
+			if err != nil {
+				// Error could not be caught by ignore config, we need to handle it manually
+				if strings.Contains(err.Error(), "ServiceNotFoundException") {
+					return nil, nil
+				}
+				plugin.Logger(ctx).Error("aws_ecs_task.listEcsTasks", "list_tasks_api_error", err)
+				return nil, err
+			}
 
-			// Context may get cancelled due to manual cancellation or if the limit has been reached
-			if d.RowsRemaining(ctx) == 0 {
-				return nil, nil
+			if len(output.TaskArns) == 0 {
+				continue
+			}
+
+			d.WaitForListRateLimit(ctx)
+
+			describeInput := &ecs.DescribeTasksInput{
+				Cluster: clusterArn,
+				Tasks:   output.TaskArns,
+				Include: []types.TaskField{types.TaskFieldTags},
+			}
+
+			result, err := svc.DescribeTasks(ctx, describeInput)
+			if err != nil {
+				plugin.Logger(ctx).Error("aws_ecs_task.listEcsTasks", "describe_tasks_api_error", err)
+				return nil, err
+			}
+
+			for _, task := range result.Tasks {
+				d.StreamListItem(ctx, task)
+
+				// Context may get cancelled due to manual cancellation or if the limit has been reached
+				if d.RowsRemaining(ctx) == 0 {
+					return nil, nil
+				}
 			}
 		}
 	}
