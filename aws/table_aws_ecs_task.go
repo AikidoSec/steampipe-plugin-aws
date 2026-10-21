@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -350,7 +349,6 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 	input.MaxResults = &maxLimit
 
 	for _, status := range desiredStatuses {
-		fmt.Println("Listing tasks with desired status:", status)
 		listInput := input
 		listInput.DesiredStatus = types.DesiredStatus(strings.TrimSpace(status))
 
