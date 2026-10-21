@@ -321,8 +321,11 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 	}
 
 	var desiredStatuses []string
-	if statuses := equalQuals["desired_status"].GetStringValue(); statuses != "" {
-		desiredStatuses = strings.Split(statuses, ",")
+	if d.EqualsQuals["desired_status"] != nil {
+		statuses := equalQuals["desired_status"].GetStringValue()
+		if statuses != "" {
+			desiredStatuses = strings.Split(statuses, ",")
+		}
 	}
 
 	if len(desiredStatuses) == 0 {
