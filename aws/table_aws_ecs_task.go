@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -320,9 +321,13 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 		input.ContainerInstance = aws.String(containerInstanceArn)
 	}
 
-	desiredStatus := equalQuals["desired_status"].GetStringValue()
-	if desiredStatus != "" {
-		input.DesiredStatus = types.DesiredStatus(desiredStatus)
+	var desiredStatuses []string
+	if statuses := equalQuals["desired_status"].GetStringValue(); statuses != "" {
+		desiredStatuses = strings.Split(statuses, ",")
+	}
+
+	if len(desiredStatuses) == 0 {
+		desiredStatuses = []string{string(types.DesiredStatusRunning)}
 	}
 	if equalQuals["launch_type"] != nil {
 		launchType := equalQuals["launch_type"].GetStringValue()
@@ -344,16 +349,10 @@ func listEcsTasks(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateDat
 
 	input.MaxResults = &maxLimit
 
-	for _, status := range []types.DesiredStatus{
-		types.DesiredStatusRunning,
-		types.DesiredStatusStopped,
-	} {
-		if desiredStatus != "" && desiredStatus != string(status) {
-			continue
-		}
-
+	for _, status := range desiredStatuses {
+		fmt.Println("Listing tasks with desired status:", status)
 		listInput := input
-		listInput.DesiredStatus = status
+		listInput.DesiredStatus = types.DesiredStatus(strings.TrimSpace(status))
 
 		paginator := ecs.NewListTasksPaginator(svc, &listInput, func(o *ecs.ListTasksPaginatorOptions) {
 			o.Limit = maxLimit
