@@ -73,6 +73,14 @@ func Plugin(ctx context.Context) *plugin.Plugin {
 				Scope:      []string{"connection", "region", "service", "action"},
 				Where:      "service = 'servicequotas' and action = 'ListTagsForResource'",
 			},
+			// CloudWatch Logs ListTagsForResource has a fixed quota of 30 calls/s per account and region.
+			{
+				Name:       "aws_logs_list_tags_for_resource",
+				FillRate:   15,
+				BucketSize: 15,
+				Scope:      []string{"connection", "region", "service", "action"},
+				Where:      "service = 'logs' and action = 'ListTagsForResource'",
+			},
 			// Not documented
 			// https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html
 			{
