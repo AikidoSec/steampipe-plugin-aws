@@ -47,6 +47,10 @@ func tableAwsLambdaFunction(_ context.Context) *plugin.Table {
 				Func: getFunctionEventInvokeConfig,
 				Tags: map[string]string{"service": "lambda", "action": "GetFunctionEventInvokeConfig"},
 			},
+			{
+				Func: getFunctionRuntimeManagementConfig,
+				Tags: map[string]string{"service": "lambda", "action": "GetRuntimeManagementConfig"},
+			},
 		},
 		Columns: awsRegionalColumns([]*plugin.Column{
 			{
@@ -255,6 +259,13 @@ func tableAwsLambdaFunction(_ context.Context) *plugin.Table {
 				Description: "The function's asynchronous invocation configuration, including maximum retry attempts, maximum event age, and destination configuration.",
 				Type:        proto.ColumnType_JSON,
 				Hydrate:     getFunctionEventInvokeConfig,
+				Transform:   transform.FromValue(),
+			},
+			{
+				Name:        "runtime_management_config",
+				Description: "The function's runtime management configuration, including the UpdateRuntimeOn setting.",
+				Type:        proto.ColumnType_JSON,
+				Hydrate:     getFunctionRuntimeManagementConfig,
 				Transform:   transform.FromValue(),
 			},
 			{
@@ -538,6 +549,62 @@ func getFunctionEventInvokeConfig(ctx context.Context, d *plugin.QueryData, h *p
 	}
 
 	return eventInvokeConfig, nil
+}
+
+func getFunctionRuntimeManagementConfig(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	functionName := functionName(h.Item)
+
+	// Runtime management is only available for zip-packaged functions
+	if functionPackageType(h.Item) == types.PackageTypeImage {
+		return nil, nil
+	}
+
+	// Create Session
+	svc, err := LambdaClient(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+
+	if svc == nil {
+		// Unsupported region check
+		return nil, nil
+	}
+
+	input := &lambda.GetRuntimeManagementConfigInput{
+		FunctionName: aws.String(functionName),
+	}
+
+	runtimeManagementConfig, err := svc.GetRuntimeManagementConfig(ctx, input)
+	if err != nil {
+		var ae smithy.APIError
+		if errors.As(err, &ae) {
+			if ae.ErrorCode() == "ResourceNotFoundException" {
+				return nil, nil
+			}
+		}
+		plugin.Logger(ctx).Error("aws_lambda_function.getFunctionRuntimeManagementConfig", "api_error", err)
+		return nil, err
+	}
+
+	return struct {
+		FunctionArn       *string
+		RuntimeVersionArn *string
+		UpdateRuntimeOn   types.UpdateRuntimeOn
+	}{
+		FunctionArn:       runtimeManagementConfig.FunctionArn,
+		RuntimeVersionArn: runtimeManagementConfig.RuntimeVersionArn,
+		UpdateRuntimeOn:   runtimeManagementConfig.UpdateRuntimeOn,
+	}, nil
+}
+
+func functionPackageType(item interface{}) types.PackageType {
+	switch item := item.(type) {
+	case types.FunctionConfiguration:
+		return item.PackageType
+	case *lambda.GetFunctionOutput:
+		return item.Configuration.PackageType
+	}
+	return ""
 }
 
 func functionName(item interface{}) string {
