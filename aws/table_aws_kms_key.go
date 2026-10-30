@@ -46,16 +46,18 @@ func tableAwsKmsKey(ctx context.Context) *plugin.Table {
 				Tags: map[string]string{"service": "kms", "action": "ListAliases"},
 			},
 			{
-				Func: getAwsKmsKeyRotationStatus,
-				Tags: map[string]string{"service": "kms", "action": "GetKeyRotationStatus"},
+				Func:    getAwsKmsKeyRotationStatus,
+				Depends: []plugin.HydrateFunc{getAwsKmsKeyData},
+				Tags:    map[string]string{"service": "kms", "action": "GetKeyRotationStatus"},
 			},
 			{
 				Func: getAwsKmsKeyPolicy,
 				Tags: map[string]string{"service": "kms", "action": "GetKeyPolicy"},
 			},
 			{
-				Func: getAwsKmsKeyTagging,
-				Tags: map[string]string{"service": "kms", "action": "ListResourceTags"},
+				Func:    getAwsKmsKeyTagging,
+				Depends: []plugin.HydrateFunc{getAwsKmsKeyData},
+				Tags:    map[string]string{"service": "kms", "action": "ListResourceTags"},
 			},
 		},
 		Columns: awsRegionalColumns([]*plugin.Column{
@@ -346,8 +348,22 @@ func getAwsKmsKeyData(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrat
 	return keyData, nil
 }
 
+func isAwsManagedKmsKey(h *plugin.HydrateData) bool {
+	keyData, ok := h.HydrateResults["getAwsKmsKeyData"].(*kms.DescribeKeyOutput)
+	if !ok || keyData == nil || keyData.KeyMetadata == nil {
+		return false
+	}
+	return keyData.KeyMetadata.KeyManager == types.KeyManagerTypeAws
+}
+
 func getAwsKmsKeyRotationStatus(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
 	key := h.Item.(types.KeyListEntry)
+
+	// AWS managed key policies can deny this call (e.g. alias/aws/acm), which shows up as
+	// AccessDenied in the customer's CloudTrail. AWS rotates these keys every year.
+	if isAwsManagedKmsKey(h) {
+		return &kms.GetKeyRotationStatusOutput{KeyRotationEnabled: true}, nil
+	}
 
 	// Create Session
 	svc, err := KMSClient(ctx, d)
@@ -382,6 +398,14 @@ func getAwsKmsKeyRotationStatus(ctx context.Context, d *plugin.QueryData, h *plu
 
 func getAwsKmsKeyTagging(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
 	key := h.Item.(types.KeyListEntry)
+
+	// AWS managed keys cannot be tagged, and their key policies can deny this call
+	if isAwsManagedKmsKey(h) {
+		return map[string]interface{}{
+			"TagsSrc": []types.Tag{},
+			"Tags":    map[string]string{},
+		}, nil
+	}
 
 	// Create Session
 	svc, err := KMSClient(ctx, d)
