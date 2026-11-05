@@ -88,6 +88,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/health"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/identitystore"
+	"github.com/aws/aws-sdk-go-v2/service/imagebuilder"
 	"github.com/aws/aws-sdk-go-v2/service/inspector"
 	"github.com/aws/aws-sdk-go-v2/service/inspector2"
 	"github.com/aws/aws-sdk-go-v2/service/iot"
@@ -923,6 +924,14 @@ func IdentityStoreClient(ctx context.Context, d *plugin.QueryData) (*identitysto
 		return nil, err
 	}
 	return identitystore.NewFromConfig(*cfg), nil
+}
+
+func ImageBuilderClient(ctx context.Context, d *plugin.QueryData) (*imagebuilder.Client, error) {
+	cfg, err := getClientForQueryRegion(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	return imagebuilder.NewFromConfig(*cfg), nil
 }
 
 func InspectorClient(ctx context.Context, d *plugin.QueryData) (*inspector.Client, error) {
